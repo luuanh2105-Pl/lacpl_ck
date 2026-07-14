@@ -30,6 +30,10 @@ function App() {
   };
 
   const analyzeWithGemini = async () => {
+    console.log("Key tôi đang dùng là:", import.meta.env.VITE_GEMINI_API_KEY); // Thêm dòng này
+    if (!import.meta.env.VITE_GEMINI_API_KEY) {
+      return alert("Key bị undefined rồi Lạc ơi!");
+    }
     if (data.length === 0) return alert("Thêm mã vào đi đã!");
     setLoading(true);
     try {
