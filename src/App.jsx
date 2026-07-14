@@ -1,45 +1,96 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Sparkles, RefreshCw } from 'lucide-react';
-
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSMXVMgaokG-P4C6m5CPbJVLmgbXeG0M_EvcZl0mC6qsS0Twj8SpWl3rvIhRXnKgeFh1yL3U5eYf83D/pub?output=csv";
+import { Sparkles, Trash2, Plus, RefreshCw, BarChart3 } from 'lucide-react';
 
 function App() {
-  const [data, setData] = useState([]);
+  // 1. Khởi tạo state: Load từ localStorage nếu có, nếu không thì dùng mảng rỗng
+  const [data, setData] = useState(() => {
+    const saved = localStorage.getItem("myPortfolio");
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [symbol, setSymbol] = useState("");
+  const [qty, setQty] = useState("");
+  const [price, setPrice] = useState("");
   const [aiResult, setAiResult] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const loadData = async () => {
-    const res = await axios.get(CSV_URL);
-    // Parse CSV đơn giản
-    const rows = res.data.split('\n').slice(1).map(row => {
-      const [Symbol, Quantity, AvgPrice] = row.split(',');
-      return { Symbol, Quantity, AvgPrice };
-    });
-    setData(rows);
+  // 2. Tự động lưu vào trình duyệt mỗi khi data thay đổi
+  useEffect(() => {
+    localStorage.setItem("myPortfolio", JSON.stringify(data));
+  }, [data]);
+
+  const addStock = () => {
+    if (!symbol || !qty || !price) return alert("Nhập đủ thông tin nhé!");
+    setData([...data, { symbol, qty, price }]);
+    setSymbol(""); setQty(""); setPrice("");
   };
 
-  const analyze = async () => {
-    const genAI = new GoogleGenerativeAI("AIzaSyDSfopeUkg5aIDBpeOtdUKexzLkDCU3m7U");
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Phân tích danh mục chứng khoán này: ${JSON.stringify(data)}`;
-    const result = await model.generateContent(prompt);
-    setAiResult(result.response.text());
+  const deleteStock = (index) => {
+    setData(data.filter((_, i) => i !== index));
   };
 
-  useEffect(() => { loadData(); }, []);
+  const analyzeWithGemini = async () => {
+    if (data.length === 0) return alert("Thêm mã vào đi đã!");
+    setLoading(true);
+    try {
+      const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const prompt = `Đây là danh mục đầu tư của tôi: ${JSON.stringify(data)}. Hãy phân tích ngắn gọn, đưa ra lời khuyên mua/bán/giữ cho từng mã dựa trên phân tích kỹ thuật chung.`;
+      const result = await model.generateContent(prompt);
+      setAiResult(result.response.text());
+    } catch (e) {
+      setAiResult("Lỗi rồi Lạc ơi, kiểm tra lại API Key nhé!");
+    }
+    setLoading(false);
+  };
 
   return (
-    <div className="p-10 bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-bold mb-5">Danh mục của Lạc</h1>
-      <button onClick={loadData} className="mb-4 bg-gray-200 p-2 rounded">Refresh Data</button>
-      
-      <table className="w-full bg-white shadow rounded mb-5">
-        {data.map((d, i) => <tr key={i}><td className="p-2 border">{d.Symbol}</td><td className="p-2 border">{d.Quantity}</td></tr>)}
+    <div className="max-w-3xl mx-auto p-6 bg-white min-h-screen font-sans">
+      <h1 className="text-3xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+        <BarChart3 /> Danh mục đầu tư của Lạc
+      </h1>
+
+      {/* Form Nhập liệu */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-6 bg-gray-50 p-4 rounded-xl border">
+        <input placeholder="Mã (MBB)" className="p-2 border rounded" value={symbol} onChange={e => setSymbol(e.target.value)} />
+        <input placeholder="Số lượng" className="p-2 border rounded" value={qty} onChange={e => setQty(e.target.value)} />
+        <input placeholder="Giá vốn" className="p-2 border rounded" value={price} onChange={e => setPrice(e.target.value)} />
+        <button onClick={addStock} className="bg-green-600 text-white p-2 rounded flex items-center justify-center gap-2 hover:bg-green-700">
+          <Plus size={18}/> Thêm
+        </button>
+      </div>
+
+      {/* Bảng dữ liệu */}
+      <table className="w-full text-left border-collapse mb-6">
+        <thead className="bg-gray-100">
+          <tr><th className="p-3 border">Mã</th><th className="p-3 border">SL</th><th className="p-3 border">Giá vốn</th><th className="p-3 border">Action</th></tr>
+        </thead>
+        <tbody>
+          {data.map((item, index) => (
+            <tr key={index} className="hover:bg-gray-50">
+              <td className="p-3 border font-bold">{item.symbol}</td>
+              <td className="p-3 border">{item.qty}</td>
+              <td className="p-3 border">{item.price}</td>
+              <td className="p-3 border text-center">
+                <button onClick={() => deleteStock(index)} className="text-red-500 hover:text-red-700"><Trash2 size={18}/></button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
       </table>
 
-      <button onClick={analyze} className="bg-blue-600 text-white p-3 rounded flex gap-2"><Sparkles/> Hỏi Gemini</button>
-      <div className="mt-5 p-5 bg-white border whitespace-pre-line">{aiResult}</div>
+      {/* Nút phân tích */}
+      <button onClick={analyzeWithGemini} disabled={loading} className="w-full bg-blue-600 text-white p-4 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-700 font-bold">
+        {loading ? <RefreshCw className="animate-spin" /> : <Sparkles />}
+        {loading ? "Đang phân tích..." : "Nhờ Gemini tư vấn danh mục"}
+      </button>
+
+      {/* Kết quả AI */}
+      {aiResult && (
+        <div className="mt-6 p-6 bg-blue-50 border-l-4 border-blue-500 rounded whitespace-pre-line text-gray-700 shadow-sm">
+          {aiResult}
+        </div>
+      )}
     </div>
   );
 }
